@@ -1,5 +1,3 @@
-__version__ = "0.1.0"
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from sentence_transformers import SentenceTransformer
