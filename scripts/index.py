@@ -22,10 +22,7 @@ import io
 import os
 
 
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-]
+origins = ["*"]
 
 app = FastAPI()
 handler = Mangum(app)
