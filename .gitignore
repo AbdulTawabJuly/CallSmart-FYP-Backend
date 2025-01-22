@@ -1,1 +1,3 @@
 .env
+scripts/lib
+*.zip
