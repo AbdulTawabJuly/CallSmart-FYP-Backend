@@ -127,16 +127,6 @@ def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
             except Exception as e:
                 print(f"Error uploading vectors: {e}")
 
-    # output_file = "Embeddings_and_Metadata.txt"
-    # with open(output_file, "w", encoding="utf-8") as file:
-    #     for idx, item in enumerate(chunks_with_metadata):
-    #         file.write(f"Chunk Number :{item["metadata"]["chunk_number"]}\n")
-    #         file.write(f"chunk_char_count {item["metadata"]["chunk_char_count"]}:\n")
-    #         file.write(f"chunk_word_count {item["metadata"]["chunk_word_count"]}:\n")
-    #         file.write(f"chunk_token_count {item["metadata"]["chunk_token_count"]}:\n")
-    #         file.write(f"text {item["chunk_content"]} + \n\n")
-    #         file.write(f"embeddings {item["embeddings"]} + \n\n")
-
     return "Uploaded as Vectors"
 
 
