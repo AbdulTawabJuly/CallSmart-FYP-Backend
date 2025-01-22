@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 from docx2pdf import convert
+from mangum import Mangum
 from docx import Document
 from typing import List
 import pandas as pd
@@ -27,6 +28,8 @@ origins = [
 ]
 
 app = FastAPI()
+handler = Mangum(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -129,6 +132,9 @@ def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
 
     return "Uploaded as Vectors"
 
+@app.get("/")
+async def test():
+    return {"message" : "Welcome to AWS Lambda!"}
 
 @app.post("/scripts/data_ingestion")
 async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(...)):
