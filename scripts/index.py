@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 from docx2pdf import convert
-from mangum import Mangum
 from docx import Document
 from typing import List
 import pandas as pd
@@ -25,7 +24,6 @@ import os
 origins = ["*"]
 
 app = FastAPI()
-handler = Mangum(app)
 
 app.add_middleware(
     CORSMiddleware,
