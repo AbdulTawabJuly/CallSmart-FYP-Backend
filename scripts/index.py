@@ -33,282 +33,280 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.state.embedding_model = SentenceTransformer("all-mpnet-base-v2", device="cpu")
-app.state.pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-app.state.index = app.state.pinecone.Index(os.getenv("PINECONE_INDEX_NAME"))
+# MAX_FILE_SIZE = 1024 * 1024 * 50  # 50MB
 
 
-MAX_FILE_SIZE = 1024 * 1024 * 50  # 50MB
+# def Text_Formatter(text: str) -> str:
+#     cleaned_text = text.replace("\n", " ").strip()
+#     return cleaned_text
 
 
-def Text_Formatter(text: str) -> str:
-    cleaned_text = text.replace("\n", " ").strip()
-    return cleaned_text
+# def Open_And_Read_Pdf(content, file_type):
+#     doc = fitz.open(stream=io.BytesIO(content), filetype=file_type)
+#     pages_and_text = []
+#     for page_number, page in enumerate(doc):
+#         text = page.get_text()
+#         text = Text_Formatter(text=text)
+#         pages_and_text.append(
+#             {
+#                 "page_number": page_number,
+#                 "page_char_count": len(text),
+#                 "page_word_count": len(text.split(" ")),
+#                 "page_sentence_count_raw": len(text.split(". ")),
+#                 "page_token_count": len(text) / 4,
+#                 "text": text,
+#             }
+#         )
+#     return pages_and_text
 
 
-def Open_And_Read_Pdf(content, file_type):
-    doc = fitz.open(stream=io.BytesIO(content), filetype=file_type)
-    pages_and_text = []
-    for page_number, page in enumerate(doc):
-        text = page.get_text()
-        text = Text_Formatter(text=text)
-        pages_and_text.append(
-            {
-                "page_number": page_number,
-                "page_char_count": len(text),
-                "page_word_count": len(text.split(" ")),
-                "page_sentence_count_raw": len(text.split(". ")),
-                "page_token_count": len(text) / 4,
-                "text": text,
-            }
-        )
-    return pages_and_text
+# def Pre_Processing(pages_and_texts):
+#     text_splitter = RecursiveCharacterTextSplitter(
+#         chunk_size=1000,
+#         chunk_overlap=100,
+#         length_function=len,
+#         is_separator_regex=False,
+#     )
+
+#     text = ""
+#     for page_number, page in enumerate(pages_and_texts):
+#         text += page["text"]
+
+#     chunks = text_splitter.split_text(text)
+
+#     chunks_with_metadata = []
+#     for i, chunk in enumerate(chunks):
+#         chunks_with_metadata.append(
+#             {
+#                 "metadata": {
+#                     "chunk_number": i,
+#                     "chunk_char_count": len(chunk),
+#                     "chunk_word_count": len(chunk.split(" ")),
+#                     "chunk_token_count": len(chunk) / 4,
+#                 },
+#                 "chunk_content": chunk,
+#             }
+#         )
+#     return chunks_with_metadata
 
 
-def Pre_Processing(pages_and_texts):
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=100,
-        length_function=len,
-        is_separator_regex=False,
-    )
+# def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
+#     from pinecone import Pinecone
 
-    text = ""
-    for page_number, page in enumerate(pages_and_texts):
-        text += page["text"]
+#     load_dotenv()
+#     embedding_model = SentenceTransformer(
+#         model_name_or_path="all-mpnet-base-v2", device="cpu"
+#     )
+#     print(embedding_model)
+#     print("Making Embeddings")
+#     for item in tqdm(chunks_with_metadata):
+#         item["embeddings"] = embedding_model.encode(item["chunk_content"])
+    
+#     if not os.getenv("PINECONE_API_KEY") or not os.getenv("PINECONE_INDEX_NAME"):
+#         raise HTTPException(500, "Pinecone API key or index name is missing")
 
-    chunks = text_splitter.split_text(text)
+#     pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+#     print(pinecone.list_indexes())
+#     index = pinecone.Index(name=os.getenv("PINECONE_INDEX_NAME"))
 
-    chunks_with_metadata = []
-    for i, chunk in enumerate(chunks):
-        chunks_with_metadata.append(
-            {
-                "metadata": {
-                    "chunk_number": i,
-                    "chunk_char_count": len(chunk),
-                    "chunk_word_count": len(chunk.split(" ")),
-                    "chunk_token_count": len(chunk) / 4,
-                },
-                "chunk_content": chunk,
-            }
-        )
-    return chunks_with_metadata
+#     batch_size = 100
+#     batch = []
 
+#     print("Storing the Embeddings in the Vector DB ")
+#     for idx, item in enumerate(chunks_with_metadata):
+#         vector = {
+#             "id": str(uuid.uuid4()),
+#             "values": item["embeddings"],
+#             "metadata": {
+#                 "text": item["chunk_content"],
+#                 "metadata": json.dumps(item["metadata"]),
+#             },
+#         }
+#         batch.append(vector)
 
-def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
-    from pinecone import Pinecone
+#         if len(batch) == batch_size or idx == len(chunks_with_metadata) - 1:
+#             print("Uploading")
+#             try:
+#                 index.upsert(vectors=batch, namespace=namespace)
+#                 print("Vectors uploaded successfully")
+#                 batch = []
+#             except Exception as e:
+#                 print(f"Error uploading vectors: {e}")
 
-    load_dotenv()
-    # embedding_model = SentenceTransformer(
-    #     model_name_or_path="all-mpnet-base-v2", device="cpu"
-    # )
-    print("Making Embeddings")
-    for item in tqdm(chunks_with_metadata):
-        item["embeddings"] = app.state.embedding_model.encode(item["chunk_content"])
-    # pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    # index = pinecone.Index(name=os.getenv("PINECONE_INDEX_NAME"))
-
-    batch_size = 100
-    batch = []
-
-    print("Storing the Embeddings in the Vector DB ")
-    for idx, item in enumerate(chunks_with_metadata):
-        vector = {
-            "id": str(uuid.uuid4()),
-            "values": item["embeddings"],
-            "metadata": {
-                "text": item["chunk_content"],
-                "metadata": json.dumps(item["metadata"]),
-            },
-        }
-        batch.append(vector)
-
-        if len(batch) == batch_size or idx == len(chunks_with_metadata) - 1:
-            print("Uploading")
-            try:
-                app.state.index.upsert(vectors=batch, namespace=namespace)
-                print("Vectors uploaded successfully")
-                batch = []
-            except Exception as e:
-                print(f"Error uploading vectors: {e}")
-
-    return "Uploaded as Vectors"
+#     return "Uploaded as Vectors"
 
 
-def chunked_list(lst, n):
-    """Yield successive n-sized chunks from lst"""
-    for i in range(0, len(lst), n):
-        yield lst[i : i + n]
+# def chunked_list(lst, n):
+#     """Yield successive n-sized chunks from lst"""
+#     for i in range(0, len(lst), n):
+#         yield lst[i : i + n]
 
 
-def clean_data(df):
-    # Handle missing values
-    df = df.fillna("N/A")
+# def clean_data(df):
+#     # Handle missing values
+#     df = df.fillna("N/A")
 
-    # Convert datetime objects
-    for col in df.select_dtypes(include=["datetime"]).columns:
-        df[col] = df[col].dt.strftime("%Y-%m-%d")
+#     # Convert datetime objects
+#     for col in df.select_dtypes(include=["datetime"]).columns:
+#         df[col] = df[col].dt.strftime("%Y-%m-%d")
 
-    # Remove special characters
-    df = df.map(lambda x: re.sub(r"[\x00-\x1F\x7F-\x9F]", "", str(x)))
+#     # Remove special characters
+#     df = df.map(lambda x: re.sub(r"[\x00-\x1F\x7F-\x9F]", "", str(x)))
 
-    return df
-
-
-def excel_to_search_text(df, filename):
-    text_chunks = []
-    for sheet_name, sheet_df in df.items() if isinstance(df, dict) else [("Data", df)]:
-        # Add sheet context
-        text_chunks.append(f"Data from {filename} - Sheet: {sheet_name}")
-
-        # Process headers
-        headers = " | ".join(sheet_df.columns)
-        text_chunks.append(f"Columns: {headers}")
-
-        # Convert rows to sentences
-        for idx, row in sheet_df.iterrows():
-            row_text = "Row {}: ".format(idx + 1) + ", ".join(
-                [f"{col} is {val}" for col, val in row.items()]
-            )
-            text_chunks.append(row_text)
-
-    return "\n".join(text_chunks)
+#     return df
 
 
-def get_columns_from_chunk(chunk: str) -> list:
-    """Extract columns from chunk text"""
-    col_lines = [line for line in chunk.split("\n") if line.startswith("Columns: ")]
-    if not col_lines:
-        return []
-    return col_lines[0].replace("Columns: ", "").split(" | ")
+# def excel_to_search_text(df, filename):
+#     text_chunks = []
+#     for sheet_name, sheet_df in df.items() if isinstance(df, dict) else [("Data", df)]:
+#         # Add sheet context
+#         text_chunks.append(f"Data from {filename} - Sheet: {sheet_name}")
+
+#         # Process headers
+#         headers = " | ".join(sheet_df.columns)
+#         text_chunks.append(f"Columns: {headers}")
+
+#         # Convert rows to sentences
+#         for idx, row in sheet_df.iterrows():
+#             row_text = "Row {}: ".format(idx + 1) + ", ".join(
+#                 [f"{col} is {val}" for col, val in row.items()]
+#             )
+#             text_chunks.append(row_text)
+
+#     return "\n".join(text_chunks)
+
+
+# def get_columns_from_chunk(chunk: str) -> list:
+#     """Extract columns from chunk text"""
+#     col_lines = [line for line in chunk.split("\n") if line.startswith("Columns: ")]
+#     if not col_lines:
+#         return []
+#     return col_lines[0].replace("Columns: ", "").split(" | ")
 
 
 @app.post("/scripts/data_ingestion")
 async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(...)):
-    for file in files:
-        content_type = file.content_type
-        file_data = await file.read()
+    print("Hello World")
+    # for file in files:
+    #     content_type = file.content_type
+    #     file_data = await file.read()
 
-        try:
-            # Handle PDF files
-            if content_type == "application/pdf":
-                print(
-                    f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
-                )
-                pages_and_text = Open_And_Read_Pdf(file_data, file_type="pdf")
-                chunks_with_metadata = Pre_Processing(pages_and_text)
-                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
+    #     try:
+    #         # Handle PDF files
+    #         if content_type == "application/pdf":
+    #             print(
+    #                 f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
+    #             )
+    #             pages_and_text = Open_And_Read_Pdf(file_data, file_type="pdf")
+    #             chunks_with_metadata = Pre_Processing(pages_and_text)
+    #             msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
 
-                return {"message": f"Extracted text from {file.filename} and {msg}"}
+    #             return {"message": f"Extracted text from {file.filename} and {msg}"}
 
-            # Handle Excel files
-            elif content_type in [
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.ms-excel",
-                "text/csv",
-            ]:
-                print(
-                    f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
-                )
+    #         # Handle Excel files
+    #         elif content_type in [
+    #             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    #             "application/vnd.ms-excel",
+    #             "text/csv",
+    #         ]:
+    #             print(
+    #                 f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
+    #             )
 
-                try:
-                    # Read with size limit
-                    if len(file_data) > MAX_FILE_SIZE:
-                        raise HTTPException(413, "File exceeds size limit")
+    #             return {
+    #                     "message": f"Processed chunks from {file.filename}"
+    #             }
 
-                    # Read file
-                    if content_type == "text/csv":
-                        df = pd.read_csv(io.BytesIO(file_data))
-                    else:
-                        df = pd.read_excel(io.BytesIO(file_data), sheet_name=None)
+                
+    #             #     # Read with size limit
+    #             #     if len(file_data) > MAX_FILE_SIZE:
+    #             #         raise HTTPException(413, "File exceeds size limit")
 
-                    # Clean data
-                    df = clean_data(df)
+    #             #     # Read file
+    #             #     if content_type == "text/csv":
+    #             #         df = pd.read_csv(io.BytesIO(file_data))
+    #             #     else:
+    #             #         df = pd.read_excel(io.BytesIO(file_data), sheet_name=None)
 
-                    # Convert to text
-                    full_text = excel_to_search_text(df, file.filename)
+    #             #     # Clean data
+    #             #     df = clean_data(df)
 
-                    # Split chunks
-                    text_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=1000,
-                        chunk_overlap=100,
-                        separators=["\n\n", "\n", "|", ". ", " ", ""],
-                    )
-                    chunks = text_splitter.split_text(full_text)
+    #             #     # Convert to text
+    #             #     full_text = excel_to_search_text(df, file.filename)
 
-                    # embedding_model = SentenceTransformer(
-                    #     model_name_or_path="all-mpnet-base-v2", device="cpu"
-                    # )
+    #             #     # Split chunks
+    #             #     text_splitter = RecursiveCharacterTextSplitter(
+    #             #         chunk_size=1000,
+    #             #         chunk_overlap=100,
+    #             #         separators=["\n\n", "\n", "|", ". ", " ", ""],
+    #             #     )
+    #             #     chunks = text_splitter.split_text(full_text)
 
-                    # pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-                    # index = pinecone.Index(name=os.getenv("PINECONE_INDEX_NAME"))
+    #             #     embedding_model = SentenceTransformer(
+    #             #         model_name_or_path="all-mpnet-base-v2", device="cpu"
+    #             #     )
 
-                    # Generate embeddings
-                    embeddings = app.state.embedding_model.encode(
-                        chunks, batch_size=32, show_progress_bar=True
-                    )
+    #             #     pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    #             #     index = pinecone.Index(name=os.getenv("PINECONE_INDEX_NAME"))
 
-                    # Prepare vectors
-                    vectors = [
-                        {
-                            "id": f"excel_{uuid.uuid4()}",
-                            "values": emb.tolist(),
-                            "metadata": {
-                                "text": chunk,
-                                "source": file.filename,
-                                "data_type": "structured",
-                                "columns": get_columns_from_chunk(chunk),
-                                "row_count": chunk.count("Row "),
-                            },
-                        }
-                        for chunk, emb in zip(chunks, embeddings)
-                    ]
+    #             #     # Generate embeddings
+    #             #     embeddings = embedding_model.encode(
+    #             #         chunks, batch_size=32, show_progress_bar=True
+    #             #     )
 
-                    # Batch upsert
-                    for batch in chunked_list(vectors, 100):
-                        app.state.index.upsert(vectors=batch, namespace=user_id)
+    #             #     # Prepare vectors
+    #             #     vectors = [
+    #             #         {
+    #             #             "id": f"excel_{uuid.uuid4()}",
+    #             #             "values": emb.tolist(),
+    #             #             "metadata": {
+    #             #                 "text": chunk,
+    #             #                 "source": file.filename,
+    #             #                 "data_type": "structured",
+    #             #                 "columns": get_columns_from_chunk(chunk),
+    #             #                 "row_count": chunk.count("Row "),
+    #             #             },
+    #             #         }
+    #             #         for chunk, emb in zip(chunks, embeddings)
+    #             #     ]
 
-                    return {
-                        "message": f"Processed {len(chunks)} chunks from {file.filename}"
-                    }
+    #             #     # Batch upsert
+    #             #     for batch in chunked_list(vectors, 100):
+    #             #         index.upsert(vectors=batch, namespace=user_id)
 
-                except Exception as e:
-                    # Handle specific errors
-                    if isinstance(e, pd.errors.ParserError):
-                        raise HTTPException(
-                            400, f"Invalid spreadsheet format: {str(e)}"
-                        )
-                    raise HTTPException(500, f"Processing failed: {str(e)}")
+    #             #     return {
+    #             #         "message": f"Processed {len(chunks)} chunks from {file.filename}"
+    #             #     }
 
-            # Handle DOCX files
-            elif (
-                content_type
-                == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ):
-                print(
-                    f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
-                )
-                with open("temp.docx", "wb") as f:
-                    f.write(file_data)
-                convert("temp.docx", "output.pdf")
-                with open("output.pdf", "rb") as pdf_file:
-                    pdf_content = pdf_file.read()
-                os.remove("output.pdf")
-                os.remove("temp.docx")
+    #         # Handle DOCX files
+    #         elif (
+    #             content_type
+    #             == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    #         ):
+    #             print(
+    #                 f"Received file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
+    #             )
+    #             with open("temp.docx", "wb") as f:
+    #                 f.write(file_data)
+    #             convert("temp.docx", "output.pdf")
+    #             with open("output.pdf", "rb") as pdf_file:
+    #                 pdf_content = pdf_file.read()
+    #             os.remove("output.pdf")
+    #             os.remove("temp.docx")
 
-                pages_and_text = Open_And_Read_Pdf(pdf_content, file_type="pdf")
-                chunks_with_metadata = Pre_Processing(pages_and_text)
-                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
+    #             pages_and_text = Open_And_Read_Pdf(pdf_content, file_type="pdf")
+    #             chunks_with_metadata = Pre_Processing(pages_and_text)
+    #             msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
 
-                return {"message": f"Extracted text from {file.filename}"}
+    #             return {"message": f"Extracted text from {file.filename}"}
 
-            # If the file type is not supported
-            else:
-                raise HTTPException(
-                    status_code=400, detail=f"Unsupported file type: {content_type}"
-                )
+    #         # If the file type is not supported
+    #         else:
+    #             raise HTTPException(
+    #                 status_code=400, detail=f"Unsupported file type: {content_type}"
+    #             )
 
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Error processing file: {str(e)}"
-            )
+    #     except Exception as e:
+    #         raise HTTPException(
+    #             status_code=500, detail=f"Error processing file: {str(e)}"
+    #         )
