@@ -3,12 +3,6 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from sentence_transformers import SentenceTransformer
 from fastapi.middleware.cors import CORSMiddleware
 from pinecone import Pinecone, ServerlessSpec
-#------------------------------------------------------------------------------
-from llama_index.core import SimpleDirectoryReader
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core import SimpleDirectoryReader
-from llama_index.readers.file import PandasExcelReader  
-#------------------------------------------------------------------------------
 from spacy.lang.en import English
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -25,7 +19,6 @@ import json
 import re
 import io
 import os
-
 
 origins = ["*"]
 
@@ -46,6 +39,7 @@ def Text_Formatter(text: str) -> str:
     cleaned_text = text.replace("\n", " ").strip()
     return cleaned_text
 
+
 def Open_And_Read_Pdf(content, file_type):
     doc = fitz.open(stream=io.BytesIO(content), filetype=file_type)
     pages_and_text = []
@@ -63,6 +57,7 @@ def Open_And_Read_Pdf(content, file_type):
             }
         )
     return pages_and_text
+
 
 def Pre_Processing(pages_and_texts):
     text_splitter = RecursiveCharacterTextSplitter(
@@ -92,6 +87,7 @@ def Pre_Processing(pages_and_texts):
             }
         )
     return chunks_with_metadata
+
 
 def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
     from pinecone import Pinecone
@@ -132,83 +128,6 @@ def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
 
     return "Uploaded as Vectors"
 
-def chunked_list(lst, n):
-    """Yield successive n-sized chunks from lst"""
-    for i in range(0, len(lst), n):
-        yield lst[i : i + n]
-
-def clean_data(df):
-    try:
-        # Handle missing values
-        df = df.fillna("N/A")
-
-        # Convert datetime objects
-        for col in df.select_dtypes(include=["datetime"]).columns:
-            df[col] = df[col].dt.strftime("%Y-%m-%d")
-
-        # Remove special characters
-        df = df.applymap(lambda x: re.sub(r"[\x00-\x1F\x7F-\x9F]", "", str(x)))
-
-        return df
-    except Exception as e:
-        print (f"Exception : {e}")
-
-def excel_to_search_text(df, filename):
-    text_chunks = []
-    try:
-        for sheet_name, sheet_df in df.items() if isinstance(df, dict) else [("Data", df)]:
-            # Add sheet context
-            text_chunks.append(f"Data from {filename} - Sheet: {sheet_name}")
-
-            # Process headers
-            headers = " | ".join(sheet_df.columns)
-            text_chunks.append(f"Columns: {headers}")
-
-            # Convert rows to sentences
-            for idx, row in sheet_df.iterrows():
-                row_text = "Row {}: ".format(idx + 1) + ", ".join(
-                    [f"{col} is {val}" for col, val in row.items()]
-                )
-                text_chunks.append(row_text)
-
-        return "\n".join(text_chunks)
-    except Exception as e:
-        print(f"Exception : {e}")
-
-def get_columns_from_chunk(chunk: str) -> list:
-    """Extract columns from chunk text"""
-    col_lines = [line for line in chunk.split("\n") if line.startswith("Columns: ")]
-    if not col_lines:
-        return []
-    return col_lines[0].replace("Columns: ", "").split(" | ")
-
-def process_excel_with_llama(file_data, filename):
-    # Create temporary file
-    temp_path = f"temp_{filename}"
-    with open(temp_path, "wb") as f:
-        f.write(file_data)
-    
-    # Initialize reader with enhanced config
-    reader = PandasExcelReader(
-        pandas_config={
-            "sheet_name": None,  # Read all sheets
-            "dtype": str,  # Preserve data types
-            "na_filter": False  # Better empty cell handling
-        }
-    )
-    
-    # Load data
-    documents = reader.load_data(file_path=temp_path)
-    
-    # Cleanup
-    os.remove(temp_path)
-    
-    return documents
-
-@app.get("/")
-async def test():
-    return {"message": "Welcome to AWS Lambda!"}
-
 @app.post("/scripts/data_ingestion")
 async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(...)):
     for file in files:
@@ -226,26 +145,6 @@ async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(
                 msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
 
                 return {"message": f"Extracted text from {file.filename} and {msg}"}
-
-            # Handle Excel files
-            elif content_type in [
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.ms-excel",
-                "text/csv",
-            ]:
-                print(
-                    f"Received Excel file: {file.filename}, Size: {round(len(file_data)/1048576,2)} MB (bytes:{len(file_data)})"
-                )
-
-                # Read with size limit
-                if len(file_data) > MAX_FILE_SIZE:
-                    raise HTTPException(413, "File exceeds size limit")
-                
-                nodes = process_excel_with_llama(file_data, file.filename)
-                print(nodes)
-
-                
-                return {"message": f"Extracted text from {file.filename}"}
 
             # Handle DOCX files
             elif (
