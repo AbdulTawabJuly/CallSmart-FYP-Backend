@@ -3,6 +3,12 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from sentence_transformers import SentenceTransformer
 from fastapi.middleware.cors import CORSMiddleware
 from pinecone import Pinecone, ServerlessSpec
+#------------------------------------------------------------------------------
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import SimpleDirectoryReader
+from llama_index.readers.file import PandasExcelReader  
+#------------------------------------------------------------------------------
 from spacy.lang.en import English
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -176,6 +182,29 @@ def get_columns_from_chunk(chunk: str) -> list:
         return []
     return col_lines[0].replace("Columns: ", "").split(" | ")
 
+def process_excel_with_llama(file_data, filename):
+    # Create temporary file
+    temp_path = f"temp_{filename}"
+    with open(temp_path, "wb") as f:
+        f.write(file_data)
+    
+    # Initialize reader with enhanced config
+    reader = PandasExcelReader(
+        pandas_config={
+            "sheet_name": None,  # Read all sheets
+            "dtype": str,  # Preserve data types
+            "na_filter": False  # Better empty cell handling
+        }
+    )
+    
+    # Load data
+    documents = reader.load_data(file_path=temp_path)
+    
+    # Cleanup
+    os.remove(temp_path)
+    
+    return documents
+
 @app.get("/")
 async def test():
     return {"message": "Welcome to AWS Lambda!"}
@@ -211,84 +240,10 @@ async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(
                 # Read with size limit
                 if len(file_data) > MAX_FILE_SIZE:
                     raise HTTPException(413, "File exceeds size limit")
-
-                # Read file
-                print(f"Reading {file.filename} ")
-                if content_type == "text/csv":
-                    df = pd.read_csv(io.BytesIO(file_data))
-                    
-                    print(f"Cleaning {file.filename}")
-                    df = clean_data(df)
-
-                else:
-                    df_dict = pd.read_excel(io.BytesIO(file_data), sheet_name=None)
-                    
-                    print(f"Cleaning {file.filename}")
-                    df_dict = {sheet_name: clean_data(sheet_df) for sheet_name, sheet_df in df_dict.items()}  # Clean each sheet
-
-                # Convert to text
-                print(f"Converting {file.filename} to Text")
-                full_text = excel_to_search_text(df_dict, file.filename)
-
-                #Split chunks
-                print(f"Splitting {file.filename} into chunks")
-                try:
-                    text_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=1000,
-                        chunk_overlap=100,
-                        separators=["\n\n", "\n", "|", ". ", " ", ""],
-                    )
-                    chunks = text_splitter.split_text(full_text)
-                    print(chunks)
-                except Exception as e:
-                    print(f"Error while Splitting {file.filename} : {e}")
                 
-                for i, chunk in enumerate(chunks):
-                    print("Chunk No : " + i)
-                    print("---"*50)
-                    print(chunk)
+                nodes = process_excel_with_llama(file_data, file.filename)
+                print(nodes)
 
-                try:
-                    load_dotenv()
-                    embedding_model = SentenceTransformer(
-                        model_name_or_path="all-mpnet-base-v2", device="cpu"
-                    )
-
-                    pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-                    index = pinecone.Index(name=os.getenv("PINECONE_INDEX_NAME"))
-                except Exception as e:
-                    print(f"Error while initializing embedding model and pinecone index : {e}")
-
-                #Generate embeddings
-                print(f"Generating Embedding for {file.filename}")
-                embeddings = embedding_model.encode(
-                    list(tqdm(chunks, desc="Encoding Chunks")), batch_size=32, show_progress_bar=False
-                )
-
-                #Prepare vectors
-                print(f"Preparing vectors for {file.filename}")
-                vectors = [
-                    {
-                        "id": f"excel_{uuid.uuid4()}",
-                        "values": emb.tolist(),
-                        "metadata": {
-                            "text": chunk,
-                            "source": file.filename,
-                            "data_type": "structured",
-                            "columns": get_columns_from_chunk(chunk),
-                            "row_count": chunk.count("Row "),
-                        },
-                    }
-                    for chunk, emb in zip(chunks, embeddings)
-                ]
-
-                #Batch upsert
-                print(f"Uploading vectors for {file.filename}")
-                try:
-                    for batch in chunked_list(vectors, 100):
-                        index.upsert(vectors=batch, namespace=user_id)
-                except Exception as e:
-                    print(f"Error Uploing vectors : {e}")
                 
                 return {"message": f"Extracted text from {file.filename}"}
 

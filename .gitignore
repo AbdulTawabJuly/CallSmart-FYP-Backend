@@ -1,3 +1,4 @@
 .env
 scripts/lib
 *.zip
+temp.txt
