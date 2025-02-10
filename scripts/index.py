@@ -129,7 +129,7 @@ def Creating_Embeddings_and_Storing(chunks_with_metadata, namespace):
     return "Uploaded as Vectors"
 
 @app.post("/scripts/data_ingestion")
-async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(...)):
+async def upload_files(bucket_id: str = Form(...), files: List[UploadFile] = File(...)):
     for file in files:
         content_type = file.content_type
         file_data = await file.read()
@@ -142,7 +142,7 @@ async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(
                 )
                 pages_and_text = Open_And_Read_Pdf(file_data, file_type="pdf")
                 chunks_with_metadata = Pre_Processing(pages_and_text)
-                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
+                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, bucket_id)
 
                 return {"message": f"Extracted text from {file.filename} and {msg}"}
 
@@ -164,7 +164,7 @@ async def upload_files(user_id: str = Form(...), files: List[UploadFile] = File(
 
                 pages_and_text = Open_And_Read_Pdf(pdf_content, file_type="pdf")
                 chunks_with_metadata = Pre_Processing(pages_and_text)
-                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, user_id)
+                msg = Creating_Embeddings_and_Storing(chunks_with_metadata, bucket_id)
 
                 return {"message": f"Extracted text from {file.filename}"}
 
